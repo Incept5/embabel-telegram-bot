@@ -1,6 +1,6 @@
 <img align="left" src="https://github.com/embabel/embabel-agent/blob/main/embabel-agent-api/images/315px-Meister_der_Weltenchronik_001.jpg?raw=true" width="180">
 
-# Generated Agent Project
+# Telegram Bot Agent
 
 ![Build](https://github.com/embabel/kotlin-agent-template/actions/workflows/maven.yml/badge.svg)
 
@@ -9,103 +9,76 @@
 <br clear="left"/>
 
 
-Starting point for your own agent development using the [Embabel framework](https://github.com/embabel/embabel-agent).
+A Telegram bot built with the [Embabel framework](https://github.com/embabel/embabel-agent) for AI-powered messaging.
 
-Uses Spring Boot 3.5.9 and Embabel 0.3.1.
+Built with Spring Boot 3.5.9 and Embabel 0.3.1.
 
-Add your magic here!
+# Setup
 
-Illustrates:
+## Prerequisites
 
-- An injected demo showing how any Spring component can be injected with an Embabel `Ai` instance to enable it to
-  perform LLM operations.
-- A simple agent
-- Unit tests for an agent verifying prompts and hyperparameters
+1. A Telegram bot token (see [TELEGRAM_INTEGRATION.md](./TELEGRAM_INTEGRATION.md) for setup instructions)
+2. Your Telegram chat ID
 
-> For the Java equivalent, see
-> our [Java agent template](https://github.com/embabel/java-agent-template).
+## Configuration
+
+Set your Telegram bot token via environment variable:
+
+```bash
+export TELEGRAM_BOT_TOKEN="your_bot_token_here"
+```
+
+Or edit `src/main/resources/application.properties`:
+
+```properties
+telegram.bot.token=your_bot_token_here
+```
 
 # Running
 
-Run the shell script to start Embabel under Spring Shell:
+Start the Embabel Spring Shell:
 
 ```bash
 ./scripts/shell.sh
 ```
 
-There is a single example
-agent, [WriteAndReviewAgent](./src/main/kotlin/com/embabel/template/agent/WriteAndReviewAgent.kt).
-It uses one LLM with a high temperature and creative persona to write a story based on your input,
-then another LLM with a low temperature and different persona to review the story.
+## Usage
 
-When the Embabel shell comes up, invoke the story agent like this:
+### Natural Language Commands (Primary Method)
 
-```
-x "Tell me a story about...[your topic]"
-```
+Use the `x` command with natural language to send messages:
 
-Try the following other shell commands:
+```shell
+# Send a message to a user
+x "Message user 8360446449 'Hello from Embabel'"
 
-- `demo`: Runs the same agent, invoked programmatically, instead of dynamically based on user input.
-  See [DemoCommands.kt](./src/main/kotlin/com/embabel/template/DemoShell.kt) for the
-  implementation.
-- `animal`:  Runs a simple demo using an Embabel injected `Ai` instance to call an LLM.
-  See [InjectedDemo](./src/main/kotlin/com/embabel/template/injected/InjectedDemo.kt).
+# Send availability request
+x "Message user 8360446449 'Are you available for a meeting next week?'"
 
-## Suggested Next Steps
-
-To get a feel for working with Embabel, try the following:
-
-- Modify the prompts in `WriteAndReviewAgent` and `InjectedDemo`.
-- Experiment with different models and hyperparameters by modifying `withLlm` calls.
-- Integrate your own services, injecting them with Spring. All Embabel `@Agent` classes are Spring beans.
-- Run the tests with `mvn test` and modify them to experiment with prompt verification.
-
-To see tool support, check out the more
-complex [Embabel Agent API Examples](https://github.com/embabel/embabel-agent-examples) repository.
-
-## Model support
-
-Embabel integrates with any LLM supported by Spring AI.
-
-See [LLM integration guide](docs/llm-docs.md) (work in progress).
-
-Also see [Spring AI models](https://docs.spring.io/spring-ai/reference/api/index.html).
-
-## Testing
-
-This repository includes unit tests demonstrating how to test Embabel agents.
-
-### Running Tests
-
-```bash
-mvn test
+# Notify about completion
+x "Send a telegram to 8360446449 saying the deployment is complete"
 ```
 
-### Unit Tests
+The agent will:
+1. Parse your natural language request
+2. Extract the chat ID and message content
+3. Send the message via Telegram
+4. Confirm delivery
 
-Unit tests use Embabel's `FakeOperationContext` and `FakePromptRunner` to test agent actions in isolation without
-calling actual LLMs.
+### Shell Command (Testing)
 
-See [WriteAndReviewAgentTest.kt](./src/test/kotlin/com/embabel/template/agent/WriteAndReviewAgentTest.kt) for examples
-of:
+For direct testing without natural language parsing:
 
-- Creating a fake context with `FakeOperationContext.create()`
-- Setting up expected responses with `context.expectResponse()`
-- Verifying prompt content contains expected values
-- Inspecting LLM invocations via `promptRunner.llmInvocations`
-
-```kotlin
-val context = FakeOperationContext.create()
-context.expectResponse(Story("Once upon a time..."))
-
-val story = agent.craftStory(userInput, context.ai())
-
-val prompt = context.llmInvocations.first().messages.first().content
-assertTrue(prompt.contains("knight"))
+```shell
+telegram --chat-id 8360446449 --message "Hello from Embabel!"
 ```
 
-## Contributors
+## How It Works
 
-[![Embabel contributors](https://contrib.rocks/image?repo=embabel/kotlin-agent-template)](https://github.com/embabel/kotlin-agent-template/graphs/contributors)
+The `TelegramNotificationAgent` uses Embabel's AI capabilities to:
+- Understand natural language messaging requests
+- Extract chat IDs and message content
+- Call the `sendTelegramMessage` tool automatically
+- Provide confirmation responses
 
+This messaging capability is designed to be part of larger agent workflows, such as organizing work trips by collecting availability from multiple users.

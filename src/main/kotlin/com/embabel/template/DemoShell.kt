@@ -1,31 +1,21 @@
 package com.embabel.template
 
-import com.embabel.agent.api.invocation.AgentInvocation
-import com.embabel.agent.core.AgentPlatform
-import com.embabel.agent.domain.io.UserInput
-import com.embabel.template.agent.ReviewedStory
-import com.embabel.template.injected.InjectedDemo
+import com.embabel.template.tools.TelegramTools
 import org.springframework.shell.standard.ShellComponent
 import org.springframework.shell.standard.ShellMethod
+import org.springframework.shell.standard.ShellOption
 
 @ShellComponent
 class DemoShell(
-    private val injectedDemo: InjectedDemo,
-    private val agentPlatform: AgentPlatform,
+    private val telegramTools: TelegramTools,
 ) {
 
-    @ShellMethod("Demo")
-    fun demo(): String {
-        // Illustrate calling an agent programmatically,
-        // as most often occurs in real applications.
-        val reviewedStory = AgentInvocation
-            .create(agentPlatform, ReviewedStory::class.java)
-            .invoke(UserInput("Tell me a story about caterpillars"))
-        return reviewedStory.content
-    }
-
-    @ShellMethod("Invent an animal")
-    fun animal(): String {
-        return injectedDemo.inventAnimal().toString()
+    @ShellMethod("Send a Telegram message")
+    fun telegram(
+        @ShellOption(help = "Chat ID to send the message to") chatId: Long,
+        @ShellOption(help = "Message to send") message: String
+    ): String {
+        val result = telegramTools.sendTelegramMessage(chatId, message)
+        return result
     }
 }

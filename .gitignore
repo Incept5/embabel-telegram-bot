@@ -1,6 +1,8 @@
 
 embabel-agent-api/src/main/resources/mcp/**
 
+.env
+
 /target/**
 */target/**
 */*/target/**
@@ -9,5 +11,7 @@ embabel-agent-api/src/main/resources/mcp/**
 .idea/**
 
 .claude
+TELEGRAM_INTEGRATION.md
+CODE_OF_CONDUCT.md
 
 **/*.log

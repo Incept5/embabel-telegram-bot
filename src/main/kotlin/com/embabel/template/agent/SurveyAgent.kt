@@ -20,73 +20,98 @@ import com.embabel.agent.api.annotation.Action
 import com.embabel.agent.api.annotation.Agent
 import com.embabel.agent.api.common.OperationContext
 import com.embabel.agent.domain.io.UserInput
+import com.embabel.template.domain.SurveyResults
 import com.embabel.template.tools.SurveyTools
-import com.embabel.template.tools.TelegramTools
+import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Profile
 
-@Agent(description = "Ask questions and collect responses from Telegram users (one or more people). Use this agent whenever the user wants to ASK someone a question and get their response back. This includes surveys, polls, collecting feedback, or asking any individual or group for their input. Keywords: ask, question, survey, poll, fetch, collect, response, answer, what is, tell me.")
+@Agent(description = "Ask questions and collect responses from Telegram users (one or more people). Use this agent whenever the user wants to ASK someone a question and get their response back. This includes surveys, polls, collecting feedback, or asking any individual or group for their input. This agent creates the survey, waits for all responses, and then processes the results. Keywords: ask, question, survey, poll, fetch, collect, response, answer, what is, tell me.")
 @Profile("!test")
 class SurveyAgent(
-    private val surveyTools: SurveyTools,
-    private val telegramTools: TelegramTools
+    private val surveyTools: SurveyTools
 ) {
+    private val logger = LoggerFactory.getLogger(SurveyAgent::class.java)
 
-    @AchievesGoal(description = "A survey has been created and sent to users")
     @Action
-    fun createSurvey(
+    fun collectSurveyResponses(
         userInput: UserInput,
         context: OperationContext
-    ): String {
-        return context.ai()
+    ): SurveyResults {
+        val extractionPrompt = """
+            Parse this survey request and extract the parameters in this exact format:
+            chatId: <number>
+            question: <the question>
+            expectedCount: <number>
+
+            User request: ${userInput.content}
+
+            Examples:
+            - "Ask user 8360446449 what their favourite colour is"
+              → chatId: 8360446449
+              → question: What is your favourite colour?
+              → expectedCount: 1
+
+            - "Ask 5 users in group -123456 what their favorite food is"
+              → chatId: -123456
+              → question: What is your favorite food?
+              → expectedCount: 5
+
+            If the user mentions asking ONE person or ONE user, set expectedCount to 1.
+            If they mention a specific number, use that number.
+
+            Respond with ONLY the three lines in the format shown above, nothing else.
+        """.trimIndent()
+
+        val extracted = context.ai()
             .withAutoLlm()
-            .withToolObject(surveyTools)
-            .withToolObject(telegramTools)
-            .generateText(
-                """
-                The user wants to ask a question and collect responses in Telegram. Parse their request and extract:
-                1. The chat ID (can be positive for individuals, negative for groups)
-                2. The survey question (what they want to ask)
-                3. The expected number of responses (how many users should respond)
+            .generateText(extractionPrompt)
 
-                User request: ${userInput.content}
+        logger.info("Extracted parameters: $extracted")
 
-                Examples:
-                - "Ask user 8360446449 what their favourite colour is"
-                  → chatId: 8360446449, question: "What is your favourite colour?", expectedCount: 1
-                - "Fetch 1 user (8360446449)'s favourite colour"
-                  → chatId: 8360446449, question: "What is your favourite colour?", expectedCount: 1
-                - "fetch 5 users in group -123456's favourite colour"
-                  → chatId: -123456, question: "What is your favourite colour?", expectedCount: 5
-                - "ask 10 people in chat -789 what their favorite food is"
-                  → chatId: -789, question: "What is your favorite food?", expectedCount: 10
-                - "survey 3 users in -555 about their preferred programming language"
-                  → chatId: -555, question: "What is your preferred programming language?", expectedCount: 3
+        val lines = extracted.trim().lines()
+        val chatId = lines.find { it.startsWith("chatId:") }
+            ?.substringAfter("chatId:")?.trim()?.toLongOrNull()
+            ?: throw IllegalArgumentException("Could not extract chatId from: $extracted")
 
-                If the user mentions asking ONE person or ONE user, set expectedCount to 1.
-                If they mention a specific number, use that number.
-                If they say "everyone" or "all users", ask the user to specify a number.
+        val question = lines.find { it.startsWith("question:") }
+            ?.substringAfter("question:")?.trim()
+            ?: throw IllegalArgumentException("Could not extract question from: $extracted")
 
-                Use the createSurvey tool to create and send the survey.
-                After creating, confirm with the user that the survey was created successfully.
-                """.trimIndent()
-            )
+        val expectedCount = lines.find { it.startsWith("expectedCount:") }
+            ?.substringAfter("expectedCount:")?.trim()?.toIntOrNull()
+            ?: throw IllegalArgumentException("Could not extract expectedCount from: $extracted")
+
+        logger.info("Parsed - chatId: $chatId, question: $question, expectedCount: $expectedCount")
+
+        val createResult = surveyTools.createSurvey(chatId, question, expectedCount)
+        val surveyId = createResult.substringAfter("ID: ").substringBefore(")").toLong()
+
+        logger.info("Survey created (ID: $surveyId), waiting for completion")
+
+        return surveyTools.waitForSurveyCompletion(surveyId, timeoutMinutes = 10)
     }
 
+    @AchievesGoal(description = "Survey responses have been collected and processed")
     @Action
-    fun checkSurveyStatus(
-        userInput: UserInput,
+    fun processSurveyResults(
+        surveyResults: SurveyResults,
         context: OperationContext
     ): String {
         return context.ai()
             .withAutoLlm()
-            .withToolObject(surveyTools)
             .generateText(
                 """
-                The user wants to check the status of an active survey.
+                Survey has been completed! The results are available on the blackboard.
 
-                User request: ${userInput.content}
+                Question: ${surveyResults.question}
 
-                Extract the chat ID and use the getSurveyStatus tool to check the current status.
+                Responses:
+                ${surveyResults.responses.joinToString("\n") { response ->
+                    "- ${response.userName ?: "User ${response.userId}"}: ${response.response}"
+                }}
+
+                Now format a summary message, for example:
+                "Availability of everyone: [list each person's response]" or "Everyone's favourite colours: [list each person's response]", make sure it applies to the question that was initially asked.
                 """.trimIndent()
             )
     }

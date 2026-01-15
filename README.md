@@ -9,7 +9,7 @@
 <br clear="left"/>
 
 
-A Telegram bot built with the [Embabel framework](https://github.com/embabel/embabel-agent) for AI-powered messaging and survey collection.
+A Telegram bot built with the [Embabel framework](https://github.com/embabel/embabel-agent)
 
 Built with Spring Boot 3.5.9, Embabel 0.3.1, and MySQL.
 
@@ -17,9 +17,8 @@ Built with Spring Boot 3.5.9, Embabel 0.3.1, and MySQL.
 
 ## Prerequisites
 
-1. A Telegram bot token (see [TELEGRAM_INTEGRATION.md](./TELEGRAM_INTEGRATION.md) for setup instructions)
-2. Your Telegram chat ID
-3. MySQL database (for survey functionality)
+1. A Telegram bot token and chat ID (see setup instructions below)
+2. MySQL database (for survey functionality)
 
 ## Database Setup
 
@@ -44,7 +43,15 @@ The database tables will be created automatically on first run.
 
 ## Telegram Configuration
 
-Set your Telegram bot token via environment variable:
+### 1. Create a Telegram Bot
+
+1. Open Telegram and search for [@BotFather](https://t.me/botfather)
+2. Send `/newbot` and follow the instructions to create a bot
+3. Copy the bot token provided by BotFather
+
+### 2. Configure the Bot Token
+
+Set your bot token via environment variable:
 
 ```bash
 export TELEGRAM_BOT_TOKEN="your_bot_token_here"
@@ -55,6 +62,27 @@ Or edit `src/main/resources/application.properties`:
 ```properties
 telegram.bot.token=your_bot_token_here
 ```
+
+### 3. Get Your Chat ID
+
+To find your chat ID (needed for sending surveys):
+
+1. Start a conversation with your bot in Telegram
+2. Send any message to the bot
+3. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+4. Look for `"chat":{"id":...}` in the response - this is your chat ID
+
+**Note:**
+- Individual chat IDs are positive numbers (e.g., `8360446449`)
+- Group chat IDs are negative numbers (e.g., `-123456789`)
+
+### Troubleshooting
+
+**"Failed to send message: Forbidden"**
+- The bot doesn't have permission. User must start a conversation with the bot first and send at least one message.
+
+**"Failed to send message: Bad Request: chat not found"**
+- The chat ID is incorrect. Double-check using the `getUpdates` API endpoint above.
 
 # Running
 
@@ -106,67 +134,43 @@ Responses (3/3):
 ================================================================================
 ```
 
-### One-Way Messaging
-
-Send notification messages (no response expected):
-
-```shell
-# Send a message to a user
-x "Message user 8360446449 'Hello from Embabel'"
-
-# Send availability request
-x "Send a telegram to 8360446449 saying the deployment is complete"
-
-# Notify about completion
-x "Notify user 8360446449 that their report is ready"
-```
-
-### Shell Commands (Testing)
-
-For direct testing without natural language parsing:
-
-```shell
-# Send a message
-telegram --chat-id 8360446449 --message "Hello from Embabel!"
-```
-
 ## How It Works
 
-This bot uses two specialized agents:
-
 ### SurveyAgent
-Handles asking questions and collecting responses:
+The bot uses a multi-action agent that handles the complete survey workflow:
+
+**Action 1: collectSurveyResponses**
 - Understands natural language survey requests
 - Extracts chat ID, question, and expected response count
 - Creates surveys in the database
-- Automatically processes incoming responses
-- Displays summary when survey completes
+- Waits for all responses to be collected (polls every 2 seconds)
+- Returns SurveyResults object to the blackboard
+
+**Action 2: processSurveyResults**
+- Receives SurveyResults from the blackboard
+- Processes and formats the collected responses
+- Displays availability summary
+- Can be extended to pass data to meeting room finder
 
 **Keywords:** ask, question, survey, poll, fetch, collect, response, answer
-
-### TelegramNotificationAgent
-Handles one-way messaging:
-- Sends notifications and announcements
-- Does not expect responses
-- Used for alerts and informational messages
-
-**Keywords:** send message, notify, announce, tell, inform
 
 ## Architecture
 
 ```
 User Request (Natural Language)
     ↓
-Agent Selection (AI-powered)
+SurveyAgent
     ↓
-├─ SurveyAgent (for questions)
-│   ├─ Create survey in database
-│   ├─ Send question via Telegram
-│   ├─ Collect responses automatically
-│   └─ Display summary when complete
-│
-└─ TelegramNotificationAgent (for notifications)
-    └─ Send message via Telegram
+Action 1: collectSurveyResponses
+    ├─ Create survey in database
+    ├─ Send question via Telegram
+    ├─ Poll for completion (every 2s, 10min timeout)
+    └─ Return SurveyResults → Blackboard
+    ↓
+Action 2: processSurveyResults
+    ├─ Receive SurveyResults from blackboard
+    ├─ Format availability summary
+    └─ [Future: Pass to meeting room finder]
 ```
 
 ## Database Schema
@@ -219,10 +223,11 @@ If the bot isn't receiving messages in group chats:
 ```
 src/main/kotlin/com/embabel/template/
 ├── agent/
-│   ├── SurveyAgent.kt              # Handles survey creation
-│   └── TelegramNotificationAgent.kt # Handles one-way messages
+│   └── SurveyAgent.kt              # Multi-action survey agent
 ├── bot/
 │   └── TelegramBotListener.kt      # Receives Telegram updates
+├── domain/
+│   └── SurveyResults.kt            # Survey results for blackboard
 ├── entity/
 │   ├── Survey.kt                   # Survey entity
 │   ├── SurveyResponse.kt           # Response entity
@@ -231,8 +236,7 @@ src/main/kotlin/com/embabel/template/
 │   ├── SurveyRepository.kt         # Survey data access
 │   └── SurveyResponseRepository.kt # Response data access
 ├── service/
-│   ├── SurveyService.kt            # Survey business logic
-│   └── SurveyResponseService.kt    # Response processing
+│   └── SurveyService.kt            # Survey business logic
 └── tools/
     ├── SurveyTools.kt              # Survey operations
     └── TelegramTools.kt            # Telegram messaging

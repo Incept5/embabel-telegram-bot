@@ -15,6 +15,7 @@
  */
 package com.embabel.template.service
 
+import com.embabel.template.domain.SurveyResults
 import com.embabel.template.entity.Survey
 import com.embabel.template.entity.SurveyResponse
 import com.embabel.template.entity.SurveyStatus
@@ -103,5 +104,39 @@ class SurveyService(
             builder.append("${index + 1}. ${response.userName ?: "User ${response.userId}"}: ${response.response}\n")
         }
         return builder.toString()
+    }
+
+    fun getCompletedSurvey(chatId: Long): Survey? {
+        return surveyRepository.findTopByChatIdAndStatusOrderByCreatedAtDesc(chatId, SurveyStatus.COMPLETED)
+    }
+
+    fun getSurveyById(surveyId: Long): Survey {
+        return surveyRepository.findById(surveyId)
+            .orElseThrow { IllegalArgumentException("Survey not found: $surveyId") }
+    }
+
+    fun getResponseCount(surveyId: Long): Int {
+        return surveyResponseRepository.countBySurveyId(surveyId)
+    }
+
+    fun getSurveyResults(surveyId: Long): SurveyResults {
+        val survey = surveyRepository.findById(surveyId)
+            .orElseThrow { IllegalArgumentException("Survey not found: $surveyId") }
+
+        val responses = surveyResponseRepository.findBySurveyId(surveyId)
+
+        return SurveyResults(
+            surveyId = survey.id!!,
+            chatId = survey.chatId,
+            question = survey.question,
+            responses = responses.map { response ->
+                SurveyResults.UserResponse(
+                    userId = response.userId,
+                    userName = response.userName,
+                    response = response.response
+                )
+            },
+            summary = survey.summary ?: generateSummary(survey, responses)
+        )
     }
 }

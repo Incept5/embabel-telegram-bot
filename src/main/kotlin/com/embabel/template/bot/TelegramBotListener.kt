@@ -15,7 +15,7 @@
  */
 package com.embabel.template.bot
 
-import com.embabel.template.service.SurveyResponseService
+import com.embabel.template.service.SurveyService
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -30,7 +30,7 @@ import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
 class TelegramBotListener(
     @Value("\${telegram.bot.token}") private val botToken: String,
     @Value("\${telegram.bot.username:EmbabelBot}") private val botUsername: String,
-    private val surveyResponseService: SurveyResponseService
+    private val surveyService: SurveyService
 ) : TelegramLongPollingBot(botToken) {
 
     private val logger = LoggerFactory.getLogger(TelegramBotListener::class.java)
@@ -57,7 +57,14 @@ class TelegramBotListener(
                 val userName = message.from?.firstName
                 val messageText = message.text
 
-                surveyResponseService.processMessage(chatId, userId, userName, messageText)
+                // Process survey responses directly
+                val activeSurvey = surveyService.getActiveSurvey(chatId)
+                if (activeSurvey != null) {
+                    val recorded = surveyService.recordResponse(activeSurvey, userId, userName, messageText)
+                    if (recorded) {
+                        logger.info("Processed survey response from user $userId for survey ${activeSurvey.id}")
+                    }
+                }
 
                 logger.info("Chat: $chatId | User: $userId ($userName) | Message: '$messageText'")
             }
